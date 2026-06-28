@@ -9,6 +9,12 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline 
 from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import cross_val_score 
+from sklearn.ensemble import RandomForestRegressor
 from classes.combined_attributes_adder import CombinedAttributesAdder 
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml2/master/"
@@ -35,12 +41,14 @@ def _display_current_plot(file_name, path=HOUSING_PATH):
         plt.show()
     plt.close() # i do this here to ensure that i can make as many plots as i want without manually closing each time i call this function
 
+def _display_scores(scores):
+    print("Scores:", scores)
+    print("Mean:", scores.mean())
+    print("Standard deviation:", scores.std())
+
 def _process_splits(housing: pd.DataFrame):
     split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     for train_index, test_index in split.split(housing, housing["income_cat"]):
-        print("NEW ITER")
-        print(train_index)
-        print(test_index)
         strat_train_set = housing.loc[train_index]
         strat_test_set = housing.loc[test_index]
         housing = strat_train_set.copy()
@@ -54,27 +62,42 @@ def _process_splits(housing: pd.DataFrame):
         housing["population_per_household"] = housing["population"]/housing["households"]
         numeric_housing = housing.select_dtypes(include=[np.number])
         corr_matrix = numeric_housing.corr()
-        print(corr_matrix["median_house_value"].sort_values(ascending=False))
+        #print(corr_matrix["median_house_value"].sort_values(ascending=False))
         imputer = SimpleImputer(strategy="median")
         housing_num = housing.drop("ocean_proximity", axis=1)
         imputer.fit(housing_num)
         X = imputer.transform(housing_num)
-        housing_tr = pd.DataFrame(
-            np.asarray(X),
-            columns=housing_num.columns.to_list(),
-            index=housing_num.index,
-        )
+        num_attribs = list(housing_num)
+        cat_attribs = ["ocean_proximity"]
         cat_encoder = OneHotEncoder()
         housing_cat = housing[["ocean_proximity"]]
         housing_cat_1hot = cat_encoder.fit_transform(housing_cat)
-        print(housing_cat_1hot)
+        #print(housing_cat_1hot)
+        housing = strat_train_set.drop(["median_house_value", "income_cat"], axis=1)
+        housing_labels = strat_train_set["median_house_value"].copy()
+        housing_num = housing.drop("ocean_proximity", axis=1)
+        num_attribs = list(housing_num)
+        cat_attribs = ["ocean_proximity"]
         num_pipeline = Pipeline([
             ('imputer', SimpleImputer(strategy="median")),
             ('attribs_adder', CombinedAttributesAdder()),
             ('std_scaler', StandardScaler())
         ])
-        housing_num_tr = num_pipeline.fit_transform(housing_num)
-        print("TR: ", housing_num_tr)
+        full_pipeline = ColumnTransformer([
+            ("num", num_pipeline, num_attribs),
+            ("cat", OneHotEncoder(), cat_attribs)
+        ])
+        housing_prepared = full_pipeline.fit_transform(housing)
+        forest_reg = RandomForestRegressor()
+        forest_reg.fit(housing_prepared, housing_labels)
+        housing_predictions = forest_reg.predict(housing_prepared)
+        forest_mse = mean_squared_error(housing_labels, housing_predictions)
+        forest_rmse = np.sqrt(forest_mse)
+        print(forest_rmse)
+        forest_scores = cross_val_score(forest_reg, housing_prepared, housing_labels, scoring="neg_mean_squared_error", cv=10)
+        forest_rmse_scores = np.sqrt(-forest_scores)
+        _display_scores(forest_rmse_scores)
+        # TODO: Experiment with GridSearchCV using the example(s) in the book to find the best hyperparameters. 
 
 def _main():
     _fetch_housing_data()
