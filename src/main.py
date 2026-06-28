@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.impute import SimpleImputer 
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline 
+from sklearn.preprocessing import StandardScaler
 from classes.combined_attributes_adder import CombinedAttributesAdder 
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml2/master/"
@@ -47,6 +49,9 @@ def _main():
     _display_current_plot("income_categories.png")
     split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     for train_index, test_index in split.split(housing, housing["income_cat"]):
+        print("NEW ITER")
+        print(train_index)
+        print(test_index)
         strat_train_set = housing.loc[train_index]
         strat_test_set = housing.loc[test_index]
         housing = strat_train_set.copy()
@@ -74,9 +79,13 @@ def _main():
         housing_cat = housing[["ocean_proximity"]]
         housing_cat_1hot = cat_encoder.fit_transform(housing_cat)
         print(housing_cat_1hot)
-        attr_adder = CombinedAttributesAdder(add_bedrooms_per_room=False)
-        housing_extra_attribs = attr_adder.transform(housing.values)
-        print(housing_extra_attribs)
+        num_pipeline = Pipeline([
+            ('imputer', SimpleImputer(strategy="median")),
+            ('attribs_adder', CombinedAttributesAdder()),
+            ('std_scaler', StandardScaler())
+        ])
+        housing_num_tr = num_pipeline.fit_transform(housing_num)
+        print("TR: ", housing_num_tr)
 
 if __name__ == "__main__":
     _main()
