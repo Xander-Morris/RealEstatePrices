@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd 
 import matplotlib.pyplot as plt 
 from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.impute import SimpleImputer 
+from sklearn.preprocessing import OneHotEncoder
+from classes.combined_attributes_adder import CombinedAttributesAdder 
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml2/master/"
 HOUSING_PATH = os.path.join("datasets", "housing")
@@ -58,6 +61,22 @@ def _main():
         numeric_housing = housing.select_dtypes(include=[np.number])
         corr_matrix = numeric_housing.corr()
         print(corr_matrix["median_house_value"].sort_values(ascending=False))
+        imputer = SimpleImputer(strategy="median")
+        housing_num = housing.drop("ocean_proximity", axis=1)
+        imputer.fit(housing_num)
+        X = imputer.transform(housing_num)
+        housing_tr = pd.DataFrame(
+            np.asarray(X),
+            columns=housing_num.columns.to_list(),
+            index=housing_num.index,
+        )
+        cat_encoder = OneHotEncoder()
+        housing_cat = housing[["ocean_proximity"]]
+        housing_cat_1hot = cat_encoder.fit_transform(housing_cat)
+        print(housing_cat_1hot)
+        attr_adder = CombinedAttributesAdder(add_bedrooms_per_room=False)
+        housing_extra_attribs = attr_adder.transform(housing.values)
+        print(housing_extra_attribs)
 
 if __name__ == "__main__":
     _main()
