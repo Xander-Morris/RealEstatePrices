@@ -25,7 +25,7 @@ def _display_current_plot(file_name, path=HOUSING_PATH):
     if "agg" in plt.get_backend().lower():
         output_path = os.path.join(path, file_name)
         plt.savefig(output_path, dpi=150, bbox_inches="tight")
-        print(f"Saved histogram figure to {output_path}")
+        print(f"Saved figure to {output_path}")
     else:
         plt.show()
     plt.close() # i do this here to ensure that i can make as many plots as i want without manually closing each time i call this function
@@ -52,6 +52,12 @@ def _main():
                 c="median_house_value", cmap=plt.get_cmap("jet"), colorbar=True)
         plt.legend()
         _display_current_plot("scatter.png")
+        housing["rooms_per_household"] = housing["total_rooms"]/housing["households"]
+        housing["bedrooms_per_room"] = housing["total_bedrooms"]/housing["total_rooms"]
+        housing["population_per_household"] = housing["population"]/housing["households"]
+        numeric_housing = housing.select_dtypes(include=[np.number])
+        corr_matrix = numeric_housing.corr()
+        print(corr_matrix["median_house_value"].sort_values(ascending=False))
 
 if __name__ == "__main__":
     _main()
