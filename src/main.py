@@ -23,10 +23,16 @@ def _main():
     _fetch_housing_data()
     housing = _load_housing_data()
     print(housing.head())
-    print(housing.info())
+    housing.info()
     print(housing.describe())
-    housing.hist(bins=50, figsize=(10,5))
-    plt.show()
+    housing.hist(bins=50, figsize=(14, 10))
+    plt.tight_layout(pad=2.0)
+    if "agg" in plt.get_backend().lower():
+        output_path = os.path.join(HOUSING_PATH, "housing_histograms.png")
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        print(f"Saved histogram figure to {output_path}")
+    else:
+        plt.show()
 
 if __name__ == "__main__":
     _main()
