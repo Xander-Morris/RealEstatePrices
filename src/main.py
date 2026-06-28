@@ -35,18 +35,7 @@ def _display_current_plot(file_name, path=HOUSING_PATH):
         plt.show()
     plt.close() # i do this here to ensure that i can make as many plots as i want without manually closing each time i call this function
 
-def _main():
-    _fetch_housing_data()
-    housing = _load_housing_data()
-    print(housing.head())
-    housing.info()
-    print(housing.describe())
-    housing["income_cat"] = pd.cut(housing["median_income"], bins=[0., 1.5, 3.0, 4.5, 6., np.inf], labels=[1, 2, 3, 4, 5])
-    housing.hist(bins=50, figsize=(14, 10))
-    plt.tight_layout(pad=2.0)
-    _display_current_plot("housing_histograms.png")
-    housing["income_cat"].hist()
-    _display_current_plot("income_categories.png")
+def _process_splits(housing: pd.DataFrame):
     split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     for train_index, test_index in split.split(housing, housing["income_cat"]):
         print("NEW ITER")
@@ -86,6 +75,20 @@ def _main():
         ])
         housing_num_tr = num_pipeline.fit_transform(housing_num)
         print("TR: ", housing_num_tr)
+
+def _main():
+    _fetch_housing_data()
+    housing = _load_housing_data()
+    print(housing.head())
+    housing.info()
+    print(housing.describe())
+    housing["income_cat"] = pd.cut(housing["median_income"], bins=[0., 1.5, 3.0, 4.5, 6., np.inf], labels=[1, 2, 3, 4, 5])
+    housing.hist(bins=50, figsize=(14, 10))
+    plt.tight_layout(pad=2.0)
+    _display_current_plot("housing_histograms.png")
+    housing["income_cat"].hist()
+    _display_current_plot("income_categories.png")
+    _process_splits(housing)
 
 if __name__ == "__main__":
     _main()
