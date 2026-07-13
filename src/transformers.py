@@ -77,7 +77,8 @@ class CombinedAttributesAdder(BaseEstimator, TransformerMixin):
         # X is a plain NumPy grid of numbers (rows x columns). We grab whole
         # columns by their position and divide them element-by-element.
         # X[:, rooms_ix] means "every row, but only the rooms column."
-        rooms_per_household = X[:, rooms_ix] / X[:, households_ix]
+        # first index is row, second index is column in expressions like X[2, 3] when dealing with NumPy grids
+        rooms_per_household = X[:, rooms_ix] / X[:, households_ix] 
         population_per_household = X[:, population_ix] / X[:, households_ix]
 
         if self.add_bedrooms_per_room:
