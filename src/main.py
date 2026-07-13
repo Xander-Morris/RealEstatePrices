@@ -1,117 +1,124 @@
-import os 
-import tarfile 
-import urllib.request   
-import numpy as np
-import pandas as pd 
-import matplotlib.pyplot as plt 
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.impute import SimpleImputer 
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import Pipeline 
-from sklearn.preprocessing import StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.model_selection import cross_val_score 
-from sklearn.ensemble import RandomForestRegressor
-from classes.combined_attributes_adder import CombinedAttributesAdder 
+"""
+main.py
+=======
 
-DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml2/master/"
-HOUSING_PATH = os.path.join("datasets", "housing")
-HOUSING_URL = DOWNLOAD_ROOT + "datasets/housing/housing.tgz"
+The CONDUCTOR of the orchestra.
 
-def _load_housing_data(housing_path=HOUSING_PATH):
-    csv_path = os.path.join(housing_path, "housing.csv")
-    return pd.read_csv(csv_path)
+This file doesn't do any heavy lifting itself. It just calls the other files in
+the right ORDER, like a recipe. Read this file top to bottom and you'll
+understand the whole machine-learning workflow at a glance:
 
-def _fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH):
-    os.makedirs(housing_path, exist_ok=True)
-    tgz_path = os.path.join(housing_path, "housing.tgz")
-    urllib.request.urlretrieve(housing_url, tgz_path)
-    with tarfile.open(tgz_path) as housing_tgz:
-        housing_tgz.extractall(path=housing_path, filter="data")
+    1. GET the data.
+    2. LOOK at the data (plots) so we understand it.
+    3. SPLIT into a training pile and a locked test pile.
+    4. BUILD the data-cleaning pipeline.
+    5. TRAIN a model and honestly measure it (cross-validation).
+    6. TUNE the model's settings (grid search).
+    7. RANK the features and DROP the weak ones.
+    8. GRADE the final model on the locked test set.
 
-def _display_current_plot(file_name, path=HOUSING_PATH):
-    if "agg" in plt.get_backend().lower():
-        output_path = os.path.join(path, file_name)
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
-        print(f"Saved figure to {output_path}")
-    else:
-        plt.show()
-    plt.close() # i do this here to ensure that i can make as many plots as i want without manually closing each time i call this function
+Each numbered step below matches that list.
+"""
 
-def _display_scores(scores):
-    print("Scores:", scores)
-    print("Mean:", scores.mean())
-    print("Standard deviation:", scores.std())
+from data import (
+    fetch_housing_data,
+    load_housing_data,
+    add_income_category,
+    stratified_split,
+)
+from plots import (
+    plot_all_histograms,
+    plot_income_histogram,
+    plot_geographic_scatter,
+)
+from pipeline import build_preprocessing_pipeline
+from modeling import (
+    separate_features_and_labels,
+    train_forest,
+    evaluate_on_training,
+    cross_validate,
+    grid_search_best_forest,
+    get_feature_names,
+    report_feature_importances,
+    build_select_and_predict_pipeline,
+    final_evaluation,
+)
 
-def _process_splits(housing: pd.DataFrame):
-    split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-    for train_index, test_index in split.split(housing, housing["income_cat"]):
-        strat_train_set = housing.loc[train_index]
-        strat_test_set = housing.loc[test_index]
-        housing = strat_train_set.copy()
-        housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4,
-                s=housing["population"]/100, label="population", figsize=(10,7),
-                c="median_house_value", cmap=plt.get_cmap("jet"), colorbar=True)
-        plt.legend()
-        _display_current_plot("scatter.png")
-        housing["rooms_per_household"] = housing["total_rooms"]/housing["households"]
-        housing["bedrooms_per_room"] = housing["total_bedrooms"]/housing["total_rooms"]
-        housing["population_per_household"] = housing["population"]/housing["households"]
-        numeric_housing = housing.select_dtypes(include=[np.number])
-        corr_matrix = numeric_housing.corr()
-        #print(corr_matrix["median_house_value"].sort_values(ascending=False))
-        imputer = SimpleImputer(strategy="median")
-        housing_num = housing.drop("ocean_proximity", axis=1)
-        imputer.fit(housing_num)
-        X = imputer.transform(housing_num)
-        num_attribs = list(housing_num)
-        cat_attribs = ["ocean_proximity"]
-        cat_encoder = OneHotEncoder()
-        housing_cat = housing[["ocean_proximity"]]
-        housing_cat_1hot = cat_encoder.fit_transform(housing_cat)
-        #print(housing_cat_1hot)
-        housing = strat_train_set.drop(["median_house_value", "income_cat"], axis=1)
-        housing_labels = strat_train_set["median_house_value"].copy()
-        housing_num = housing.drop("ocean_proximity", axis=1)
-        num_attribs = list(housing_num)
-        cat_attribs = ["ocean_proximity"]
-        num_pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy="median")),
-            ('attribs_adder', CombinedAttributesAdder()),
-            ('std_scaler', StandardScaler())
-        ])
-        full_pipeline = ColumnTransformer([
-            ("num", num_pipeline, num_attribs),
-            ("cat", OneHotEncoder(), cat_attribs)
-        ])
-        housing_prepared = full_pipeline.fit_transform(housing)
-        forest_reg = RandomForestRegressor()
-        forest_reg.fit(housing_prepared, housing_labels)
-        housing_predictions = forest_reg.predict(housing_prepared)
-        forest_mse = mean_squared_error(housing_labels, housing_predictions)
-        forest_rmse = np.sqrt(forest_mse)
-        print(forest_rmse)
-        forest_scores = cross_val_score(forest_reg, housing_prepared, housing_labels, scoring="neg_mean_squared_error", cv=10)
-        forest_rmse_scores = np.sqrt(-forest_scores)
-        _display_scores(forest_rmse_scores)
-        # TODO: Experiment with GridSearchCV using the example(s) in the book to find the best hyperparameters. 
 
-def _main():
-    _fetch_housing_data()
-    housing = _load_housing_data()
-    print(housing.head())
-    housing.info()
-    print(housing.describe())
-    housing["income_cat"] = pd.cut(housing["median_income"], bins=[0., 1.5, 3.0, 4.5, 6., np.inf], labels=[1, 2, 3, 4, 5])
-    housing.hist(bins=50, figsize=(14, 10))
-    plt.tight_layout(pad=2.0)
-    _display_current_plot("housing_histograms.png")
-    housing["income_cat"].hist()
-    _display_current_plot("income_categories.png")
-    _process_splits(housing)
+def main():
+    # ------------------------------------------------------------------ #
+    # STEP 1 — GET THE DATA
+    # ------------------------------------------------------------------ #
+    fetch_housing_data()                 # download + unzip it (once)
+    housing = load_housing_data()        # read the CSV into a DataFrame
 
+    # A couple of quick text summaries in the terminal so we know what we've got:
+    print(housing.head())                # first 5 rows
+    housing.info()                       # column names + how many blanks
+    print(housing.describe())            # min/max/average of each number column
+
+    # ------------------------------------------------------------------ #
+    # STEP 2 — LOOK AT THE DATA (before we split, just to understand it)
+    # ------------------------------------------------------------------ #
+    # We add income buckets first because one of the plots uses them.
+    housing = add_income_category(housing)
+    plot_all_histograms(housing)         # shape of every numeric column
+    plot_income_histogram(housing)       # are the income buckets balanced?
+
+    # ------------------------------------------------------------------ #
+    # STEP 3 — SPLIT into training and (locked) test piles
+    # ------------------------------------------------------------------ #
+    # After this line, we pretend the test set DOESN'T EXIST until the very end.
+    strat_train_set, strat_test_set = stratified_split(housing)
+
+    # A picture of just the training data on the California map.
+    plot_geographic_scatter(strat_train_set.copy())
+
+    # Separate each pile into inputs (X) and the answer (y).
+    X_train, y_train = separate_features_and_labels(strat_train_set)
+    X_test, y_test = separate_features_and_labels(strat_test_set)
+
+    # ------------------------------------------------------------------ #
+    # STEP 4 — BUILD the data-cleaning pipeline and RUN it on the training inputs
+    # ------------------------------------------------------------------ #
+    # fit_transform = learn the medians/scales from training data AND apply them.
+    full_pipeline = build_preprocessing_pipeline()
+    X_train_prepared = full_pipeline.fit_transform(X_train)
+
+    # ------------------------------------------------------------------ #
+    # STEP 5 — TRAIN a first model and measure it honestly
+    # ------------------------------------------------------------------ #
+    forest = train_forest(X_train_prepared, y_train)
+    evaluate_on_training(forest, X_train_prepared, y_train)  # optimistic number
+    cross_validate(forest, X_train_prepared, y_train)        # honest number
+
+    # ------------------------------------------------------------------ #
+    # STEP 6 — TUNE the model's settings to squeeze out more accuracy
+    # ------------------------------------------------------------------ #
+    best_forest = grid_search_best_forest(X_train_prepared, y_train)
+
+    # ------------------------------------------------------------------ #
+    # STEP 7 — RANK features, then build the "prep + DROP weak + predict" model
+    # ------------------------------------------------------------------ #
+    feature_names = get_feature_names(full_pipeline)
+    importances = report_feature_importances(best_forest, feature_names)
+
+    # This one pipeline cleans data, keeps only the strongest features, and
+    # predicts — all in a single object we can reuse on any new data.
+    final_model = build_select_and_predict_pipeline(
+        full_pipeline, importances, best_forest
+    )
+    # Re-fit the whole chain on the raw training inputs so the feature-selection
+    # step and the forest are trained together on the pruned feature set.
+    final_model.fit(X_train, y_train)
+
+    # ------------------------------------------------------------------ #
+    # STEP 8 — GRADE the final model on the locked test set (the honest score)
+    # ------------------------------------------------------------------ #
+    final_evaluation(final_model, X_test, y_test)
+
+
+# This guard means "only run main() if this file is launched directly."
+# If some other file imports this one, main() will NOT auto-run. Standard Python.
 if __name__ == "__main__":
-    _main()
+    main()
