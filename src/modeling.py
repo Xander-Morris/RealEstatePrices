@@ -17,20 +17,17 @@ Vocabulary you'll keep meeting:
 """
 
 import numpy as np
-from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
+                                     cross_val_score)
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVR
 
-from config import (
-    TARGET_COLUMN,
-    CATEGORICAL_COLUMN,
-    NUMERIC_COLUMNS,
-    RANDOM_SEED,
-)
+from config import (CATEGORICAL_COLUMN, NUMERIC_COLUMNS, RANDOM_SEED,
+                    TARGET_COLUMN)
 from pipeline import build_preprocessing_pipeline
 from transformers import TopFeatureSelector
-
 
 # How many of the strongest features to keep when we prune. From the importance
 # ranking, a big chunk of the total importance sits in the top ~8 features and
@@ -133,8 +130,18 @@ def grid_search_best_forest(X_prepared, y):
         {"bootstrap": [False], "n_estimators": [3, 10], "max_features": [2, 3, 4]},
     ]
 
-    forest = RandomForestRegressor(random_state=RANDOM_SEED)
-    grid_search = GridSearchCV(
+    # do SVR search first 
+    svr_search = SVR(
+        kernel="linear", 
+        C = 0.1
+    )
+
+    svr_search.fit(X_prepared, y)
+    print("Best hyperparameters found SVR:", svr_search.get_params())
+
+    # do grid search as well
+    forest = RandomForestRegressor(random_state=RANDOM_SEED)    
+    grid_search = RandomizedSearchCV(
         forest,
         param_grid,
         cv=5,
